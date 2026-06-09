@@ -24,19 +24,17 @@ def timeout_handler(signum, frame):
 
 def parse_available(soup):
     result = []
-    for day_div in soup.find_all("div", class_="calendar_date"):
-        if "calendar_date_past" in day_div.get("class", []):
-            continue
-        date_div = day_div.find("div", class_="calendar_date_no")
+    for day_div in soup.find_all("div", class_="every_date"):
+        date_div = day_div.find("div", class_="calendar_date")
         price_div = day_div.find("div", class_="calendar_price")
         if not date_div or not price_div:
             continue
         date_num = date_div.get_text(strip=True)
         price_text = price_div.get_text(strip=True)
-        if price_text and "NT$" in price_text:
+        if date_num and price_text and "NT$" in price_text:
             result.append(date_num)
     return result
-
+    
 def get_all_hidden(soup):
     hidden = {}
     for inp in soup.find_all("input", {"type": "hidden"}):
@@ -117,19 +115,6 @@ def scrape_room(r_id):
     soup = BeautifulSoup(html, "html.parser")
     dates1 = parse_available(soup)
     print(f"  第1個月找到 {len(dates1)} 個空房: {dates1}")
-
-    # DEBUG
-    if r_id == "7734":
-        # 找含有 NT$ 的所有 div
-        for d in soup.find_all("div"):
-            t = d.get_text(strip=True)
-            if "NT$" in t and len(t) < 50:
-                print(f"  NT$div class={d.get('class')} text={repr(t)}")
-                print(f"  parent class={d.parent.get('class') if d.parent else None}")
-                print(f"  parent HTML={str(d.parent)[:300] if d.parent else None}")
-                print("  ---")
-    
-    # end debug    
     
     for d in dates1:
         all_available.append(f"{now_dt.year}/{now_dt.month:02d}/{d}")
