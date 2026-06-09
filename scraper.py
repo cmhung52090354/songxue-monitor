@@ -17,17 +17,16 @@ ROOM_IDS = {
 
 def parse_available(soup):
     result = []
-    for day_div in soup.find_all("div", class_="every_date"):
+    for day_div in soup.find_all("div", class_="calendar_date"):
+        if "calendar_date_past" in day_div.get("class", []):
+            continue
         date_div = day_div.find("div", class_="calendar_date_no")
-        room_div = day_div.find("div", class_="calendar_room_no")
-        if not date_div or not room_div:
+        price_div = day_div.find("div", class_="calendar_price")
+        if not date_div or not price_div:
             continue
-        ds = date_div.find("span")
-        if not ds:
-            continue
-        date_num = ds.text.strip()
-        room_text = room_div.get_text(strip=True)
-        if room_text and room_text != "無房間" and "NT$" in room_text:
+        date_num = date_div.get_text(strip=True)
+        price_text = price_div.get_text(strip=True)
+        if price_text and "NT$" in price_text:
             result.append(date_num)
     return result
 
@@ -41,8 +40,6 @@ def get_all_hidden(soup):
     return hidden
 
 def make_session():
-    """依序嘗試不同方式建立 session"""
-    # 方法1: cloudscraper
     try:
         import cloudscraper
         s = cloudscraper.create_scraper(
@@ -53,7 +50,6 @@ def make_session():
     except Exception as e:
         print(f"cloudscraper 失敗: {e}")
 
-    # 方法2: curl_cffi
     try:
         from curl_cffi import requests as cffi_req
         s = cffi_req.Session(impersonate="chrome120")
@@ -62,7 +58,6 @@ def make_session():
     except Exception as e:
         print(f"curl_cffi 失敗: {e}")
 
-    # 方法3: 一般 requests
     import requests as req
     s = req.Session()
     s.headers.update({
@@ -85,25 +80,11 @@ def scrape_room(r_id):
 
     # 第1個月
     r = session.get(url, headers=headers, timeout=60)
-    if hasattr(r, 'encoding'):
-        r.encoding = "utf-8"
     html = r.text if hasattr(r, 'text') else r.content.decode("utf-8")
-
     if "cf-error" in html or "Cloudflare" in html:
         print(f"  r={r_id} 被 Cloudflare 擋住（方法: {method}）")
         return None
-
     soup = BeautifulSoup(html, "html.parser")
-  
-    # DEBUG: 印出頁面前500字元和所有div class
-    print(f"  頁面長度: {len(html)}")
-    print(f"  頁面前300字: {html[:300]}")
-    all_classes = set()
-    for d in soup.find_all("div", class_=True):
-        for c in d.get("class", []):
-            all_classes.add(c)
-    print(f"  div classes: {sorted(all_classes)[:20]}")
-    
     dates1 = parse_available(soup)
     print(f"  第1個月找到 {len(dates1)} 個空房")
     for d in dates1:
@@ -157,11 +138,11 @@ if __name__ == "__main__":
     now_str = (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime("%Y-%m-%d %H:%M")
     result = {"updated_at": now_str, "rooms": {}}
 
-    # 暫時只跑一個房型 debug
-    for r_id, name in list(ROOM_IDS.items())[:1]:
+    for r_id, name in ROOM_IDS.items():
         print(f"查詢 {name}...")
         dates = scrape_room(r_id)
         result["rooms"][name] = dates if dates is not None else []
+        print(f"  → 共 {len(result['rooms'][name])} 個空房日期")
 
     update_gist(result)
     print("完成！")
