@@ -157,11 +157,11 @@ if __name__ == "__main__":
     now_str = (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime("%Y-%m-%d %H:%M")
     result = {"updated_at": now_str, "rooms": {}}
 
-    for r_id, name in ROOM_IDS.items():
+    # 暫時只跑一個房型 debug
+    for r_id, name in list(ROOM_IDS.items())[:1]:
         print(f"查詢 {name}...")
         dates = scrape_room(r_id)
         result["rooms"][name] = dates if dates is not None else []
-        print(f"  → 共 {len(result['rooms'][name])} 個空房日期")
 
     update_gist(result)
     print("完成！")
