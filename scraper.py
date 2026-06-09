@@ -32,9 +32,9 @@ def parse_available(soup):
         date_num = date_div.get_text(strip=True)
         price_text = price_div.get_text(strip=True)
         if date_num and price_text and "NT$" in price_text:
-            result.append(date_num)
+            result.append({"date": date_num, "price": price_text})
     return result
-    
+
 def get_all_hidden(soup):
     hidden = {}
     for inp in soup.find_all("input", {"type": "hidden"}):
@@ -45,7 +45,6 @@ def get_all_hidden(soup):
     return hidden
 
 def safe_request(session, method, url, timeout=30, **kwargs):
-    """帶有 signal timeout 保護的請求"""
     signal.signal(signal.SIGALRM, timeout_handler)
     signal.alarm(timeout)
     try:
@@ -114,10 +113,12 @@ def scrape_room(r_id):
         return None
     soup = BeautifulSoup(html, "html.parser")
     dates1 = parse_available(soup)
-    print(f"  第1個月找到 {len(dates1)} 個空房: {dates1}")
-    
+    print(f"  第1個月找到 {len(dates1)} 個空房")
     for d in dates1:
-        all_available.append(f"{now_dt.year}/{now_dt.month:02d}/{d}")
+        all_available.append({
+            "date": f"{now_dt.year}/{now_dt.month:02d}/{d['date']}",
+            "price": d["price"]
+        })
 
     # 第2個月
     print(f"  抓第2個月...")
@@ -126,14 +127,17 @@ def scrape_room(r_id):
     post_data["__EVENTARGUMENT"] = ""
     r2 = safe_request(session, "POST", url, timeout=30, headers=headers, data=post_data)
     if r2 is None:
-        return all_available  # 至少回傳第1個月
+        return all_available
     html2 = r2.text if hasattr(r2, 'text') else r2.content.decode("utf-8")
     soup2 = BeautifulSoup(html2, "html.parser")
     dt2 = now_dt + datetime.timedelta(days=31)
     dates2 = parse_available(soup2)
-    print(f"  第2個月找到 {len(dates2)} 個空房: {dates2}")
+    print(f"  第2個月找到 {len(dates2)} 個空房")
     for d in dates2:
-        all_available.append(f"{dt2.year}/{dt2.month:02d}/{d}")
+        all_available.append({
+            "date": f"{dt2.year}/{dt2.month:02d}/{d['date']}",
+            "price": d["price"]
+        })
 
     # 第3個月
     print(f"  抓第3個月...")
@@ -142,14 +146,17 @@ def scrape_room(r_id):
     post_data2["__EVENTARGUMENT"] = ""
     r3 = safe_request(session, "POST", url, timeout=30, headers=headers, data=post_data2)
     if r3 is None:
-        return all_available  # 至少回傳前2個月
+        return all_available
     html3 = r3.text if hasattr(r3, 'text') else r3.content.decode("utf-8")
     soup3 = BeautifulSoup(html3, "html.parser")
     dt3 = now_dt + datetime.timedelta(days=62)
     dates3 = parse_available(soup3)
-    print(f"  第3個月找到 {len(dates3)} 個空房: {dates3}")
+    print(f"  第3個月找到 {len(dates3)} 個空房")
     for d in dates3:
-        all_available.append(f"{dt3.year}/{dt3.month:02d}/{d}")
+        all_available.append({
+            "date": f"{dt3.year}/{dt3.month:02d}/{d['date']}",
+            "price": d["price"]
+        })
 
     return all_available
 
