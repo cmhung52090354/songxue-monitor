@@ -1,0 +1,26 @@
+name: 松雪樓空房查詢
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # 每30分鐘執行一次
+  workflow_dispatch:           # 允許手動觸發
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4 curl_cffi
+
+      - name: Run scraper
+        env:
+          GIST_ID: ${{ secrets.GIST_ID }}
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+        run: python scraper.py
