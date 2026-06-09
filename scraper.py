@@ -120,11 +120,14 @@ def scrape_room(r_id):
 
     # DEBUG
     if r_id == "7734":
-        cal_divs = soup.find_all("div", class_="calendar_date")
-        print(f"  calendar_date 數量: {len(cal_divs)}")
-        if cal_divs:
-            # 印出第一個的完整 HTML
-            print(cal_divs[0].prettify())
+        # 找含有 NT$ 的所有 div
+        for d in soup.find_all("div"):
+            t = d.get_text(strip=True)
+            if "NT$" in t and len(t) < 50:
+                print(f"  NT$div class={d.get('class')} text={repr(t)}")
+                print(f"  parent class={d.parent.get('class') if d.parent else None}")
+                print(f"  parent HTML={str(d.parent)[:300] if d.parent else None}")
+                print("  ---")
     
     # end debug    
     
