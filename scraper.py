@@ -118,18 +118,14 @@ def scrape_room(r_id):
     dates1 = parse_available(soup)
     print(f"  第1個月找到 {len(dates1)} 個空房: {dates1}")
 
-    # DEBUG - 只對第一個房型
+    # DEBUG
     if r_id == "7734":
         cal_divs = soup.find_all("div", class_="calendar_date")
         print(f"  calendar_date 數量: {len(cal_divs)}")
         if cal_divs:
-            for cd in cal_divs[:5]:
-                print(f"  ---")
-                print(f"  class: {cd.get('class')}")
-                price = cd.find("div", class_="calendar_price")
-                date = cd.find("div", class_="calendar_date_no")
-                print(f"  date_no: {date.get_text(strip=True) if date else 'None'}")
-                print(f"  price: {price.get_text(strip=True) if price else 'None'}")  
+            # 印出第一個的完整 HTML
+            print(cal_divs[0].prettify())
+    
     # end debug    
     
     for d in dates1:
