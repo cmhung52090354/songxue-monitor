@@ -94,6 +94,16 @@ def scrape_room(r_id):
         return None
 
     soup = BeautifulSoup(html, "html.parser")
+  
+    # DEBUG: 印出頁面前500字元和所有div class
+    print(f"  頁面長度: {len(html)}")
+    print(f"  頁面前300字: {html[:300]}")
+    all_classes = set()
+    for d in soup.find_all("div", class_=True):
+        for c in d.get("class", []):
+            all_classes.add(c)
+    print(f"  div classes: {sorted(all_classes)[:20]}")
+    
     dates1 = parse_available(soup)
     print(f"  第1個月找到 {len(dates1)} 個空房")
     for d in dates1:
