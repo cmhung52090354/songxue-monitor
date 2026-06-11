@@ -90,7 +90,7 @@ def make_session():
     print("使用一般 requests")
     return s
 
-def scrape_room(r_id):
+def scrape_room_once(r_id):
     url = f"{SONGXUE_BASE_URL}?m=1156&r={r_id}&lg=ch"
     session = make_session()
     headers = {
@@ -159,6 +159,22 @@ def scrape_room(r_id):
         })
 
     return all_available
+
+
+def scrape_room(r_id, max_retries=3):
+    """重試機制：若結果為 None 或 0 筆，重新嘗試"""
+    result = None
+    for attempt in range(1, max_retries + 1):
+        result = scrape_room_once(r_id)
+        if result is None:
+            print(f"  第{attempt}次嘗試失敗（被擋）")
+            continue
+        if len(result) > 0:
+            return result
+        print(f"  第{attempt}次嘗試結果為0個空房，重試...")
+
+    # 全部嘗試都失敗或0，回傳空陣列
+    return result if result is not None else []
 
 def update_gist(data):
     url = f"https://api.github.com/gists/{GIST_ID}"
