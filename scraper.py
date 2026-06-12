@@ -102,7 +102,7 @@ def scrape_room_once(r_id):
     now_dt = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
     all_available = []
 
-    # 第1個月
+   # 第1個月
     print(f"  抓第1個月...")
     r = safe_request(session, "GET", url, timeout=30, headers=headers)
     if r is None:
@@ -119,6 +119,15 @@ def scrape_room_once(r_id):
             "date": f"{now_dt.year}/{now_dt.month:02d}/{d['date']}",
             "price": d["price"]
         })
+
+    # DEBUG
+    if r_id == "7734":
+        every_dates = soup.find_all("div", class_="every_date")
+        every_dates_past = soup.find_all("div", class_="every_date_past")
+        print(f"  every_date: {len(every_dates)}, every_date_past: {len(every_dates_past)}")
+        print(f"  頁面長度: {len(html)}")
+        if len(every_dates) == 0 and len(every_dates_past) == 0:
+            print(f"  頁面前500字: {html[:500]}")
 
     # 第2個月
     print(f"  抓第2個月...")
