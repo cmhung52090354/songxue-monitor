@@ -158,6 +158,13 @@ def scrape_room_once(r_id):
             "price": d["price"]
         })
 
+    
+    print("status:", resp.status_code, "length:", len(resp.text))
+    print("含 NT$:", "NT$" in resp.text, "含 cloudflare:", "cloudflare" in resp.text.lower())
+    print(resp.text[:300])
+
+
+    
     return all_available
 
 
