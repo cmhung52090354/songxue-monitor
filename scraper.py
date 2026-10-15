@@ -81,6 +81,15 @@ def safe_request(session, method, url, timeout=30, **kwargs):
 
 
 def make_session():
+    # cloudscraper 已被 Cloudflare 擋住(403 Just a moment),改為優先使用 curl_cffi
+    try:
+        from curl_cffi import requests as cffi_req
+        s = cffi_req.Session(impersonate="chrome")
+        print("使用 curl_cffi")
+        return s
+    except Exception as e:
+        print(f"curl_cffi 失敗: {e}")
+
     try:
         import cloudscraper
         s = cloudscraper.create_scraper(
@@ -90,14 +99,6 @@ def make_session():
         return s
     except Exception as e:
         print(f"cloudscraper 失敗: {e}")
-
-    try:
-        from curl_cffi import requests as cffi_req
-        s = cffi_req.Session(impersonate="chrome120")
-        print("使用 curl_cffi")
-        return s
-    except Exception as e:
-        print(f"curl_cffi 失敗: {e}")
 
     import requests as req
     s = req.Session()
@@ -110,6 +111,14 @@ def make_session():
 
 def get_html(resp):
     return resp.text if hasattr(resp, "text") else resp.content.decode("utf-8")
+
+
+def is_blocked(resp, html):
+    """判斷是否被 Cloudflare 擋住(先前只檢查 cf-error,漏掉 'Just a moment')"""
+    if resp.status_code in (403, 429, 503):
+        return True
+    markers = ("Just a moment", "cf-error", "Attention Required", "challenge-platform")
+    return any(mk in html for mk in markers)
 
 
 def debug_html(label, resp, html):
@@ -159,8 +168,8 @@ def scrape_room_once(r_id):
         return None
     html = get_html(r)
     debug_html("m1", r, html)
-    if "cf-error" in html or "Attention Required" in html:
-        print(f"  r={r_id} 被 Cloudflare 擋住")
+    if is_blocked(r, html):
+        print(f"  r={r_id} 被 Cloudflare 擋住 (status={r.status_code})")
         return None
     soup = BeautifulSoup(html, "html.parser")
     scrape_month("1", 0, now_dt, soup, all_available)
@@ -174,6 +183,9 @@ def scrape_room_once(r_id):
     if r2 is None:
         return all_available
     html2 = get_html(r2)
+    if is_blocked(r2, html2):
+        print("  第2個月被 Cloudflare 擋住")
+        return all_available
     soup2 = BeautifulSoup(html2, "html.parser")
     scrape_month("2", 1, now_dt, soup2, all_available)
 
@@ -186,13 +198,16 @@ def scrape_room_once(r_id):
     if r3 is None:
         return all_available
     html3 = get_html(r3)
+    if is_blocked(r3, html3):
+        print("  第3個月被 Cloudflare 擋住")
+        return all_available
     soup3 = BeautifulSoup(html3, "html.parser")
     scrape_month("3", 2, now_dt, soup3, all_available)
 
     return all_available
 
 
-def scrape_room(r_id, max_retries=5):
+def scrape_room(r_id, max_retries=3):
     """重試機制：若結果為 None 或 0 筆，重新嘗試"""
     result = None
     for attempt in range(1, max_retries + 1):
