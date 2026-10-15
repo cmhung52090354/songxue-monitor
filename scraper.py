@@ -4,6 +4,8 @@ import json
 import datetime
 import os
 import signal
+import sys
+import time
 
 GIST_ID = os.environ["GIST_ID"]
 GIST_TOKEN = os.environ["GIST_TOKEN"]
@@ -16,11 +18,23 @@ ROOM_IDS = {
     "7736": "松雪樓四人房",
 }
 
+# 除錯開關:確認問題解決後可改成 False
+DEBUG = True
+
+
 class TimeoutError(Exception):
     pass
 
+
 def timeout_handler(signum, frame):
     raise TimeoutError("請求逾時")
+
+
+def add_months(dt, n):
+    """回傳 dt 往後 n 個月的 (年, 月),不會有月底溢位問題"""
+    m = dt.month - 1 + n
+    return dt.year + m // 12, m % 12 + 1
+
 
 def parse_available(soup):
     result = []
@@ -35,6 +49,7 @@ def parse_available(soup):
             result.append({"date": date_num, "price": price_text})
     return result
 
+
 def get_all_hidden(soup):
     hidden = {}
     for inp in soup.find_all("input", {"type": "hidden"}):
@@ -43,6 +58,7 @@ def get_all_hidden(soup):
         if name:
             hidden[name] = value
     return hidden
+
 
 def safe_request(session, method, url, timeout=30, **kwargs):
     signal.signal(signal.SIGALRM, timeout_handler)
@@ -62,6 +78,7 @@ def safe_request(session, method, url, timeout=30, **kwargs):
         signal.alarm(0)
         print(f"  請求錯誤: {e}")
         return None
+
 
 def make_session():
     try:
@@ -90,6 +107,39 @@ def make_session():
     print("使用一般 requests")
     return s
 
+
+def get_html(resp):
+    return resp.text if hasattr(resp, "text") else resp.content.decode("utf-8")
+
+
+def debug_html(label, resp, html):
+    """印出回應狀態,用來判斷是被擋、改版還是解析問題"""
+    if not DEBUG:
+        return
+    print(f"  [DEBUG:{label}] status={resp.status_code} length={len(html)}")
+    print(
+        f"  [DEBUG:{label}] 含NT$={'NT$' in html} "
+        f"含every_date={'every_date' in html} "
+        f"含calendar_price={'calendar_price' in html} "
+        f"含cloudflare={'cloudflare' in html.lower()}"
+    )
+    print(f"  [DEBUG:{label}] 前300字: {html[:300]!r}")
+    idx = html.find("NT$")
+    if idx != -1:
+        print(f"  [DEBUG:{label}] NT$附近: {html[max(0, idx - 300):idx + 100]!r}")
+
+
+def scrape_month(label, month_offset, now_dt, soup, all_available):
+    dates = parse_available(soup)
+    print(f"  第{label}個月找到 {len(dates)} 個空房")
+    y, m = add_months(now_dt, month_offset)
+    for d in dates:
+        all_available.append({
+            "date": f"{y}/{m:02d}/{d['date']}",
+            "price": d["price"],
+        })
+
+
 def scrape_room_once(r_id):
     url = f"{SONGXUE_BASE_URL}?m=1156&r={r_id}&lg=ch"
     session = make_session()
@@ -102,75 +152,48 @@ def scrape_room_once(r_id):
     now_dt = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
     all_available = []
 
-   # 第1個月
-    print(f"  抓第1個月...")
+    # 第1個月
+    print("  抓第1個月...")
     r = safe_request(session, "GET", url, timeout=30, headers=headers)
     if r is None:
         return None
-    html = r.text if hasattr(r, 'text') else r.content.decode("utf-8")
+    html = get_html(r)
+    debug_html("m1", r, html)
     if "cf-error" in html or "Attention Required" in html:
         print(f"  r={r_id} 被 Cloudflare 擋住")
         return None
     soup = BeautifulSoup(html, "html.parser")
-    dates1 = parse_available(soup)
-    print(f"  第1個月找到 {len(dates1)} 個空房")
-    for d in dates1:
-        all_available.append({
-            "date": f"{now_dt.year}/{now_dt.month:02d}/{d['date']}",
-            "price": d["price"]
-        })
+    scrape_month("1", 0, now_dt, soup, all_available)
 
     # 第2個月
-    print(f"  抓第2個月...")
+    print("  抓第2個月...")
     post_data = get_all_hidden(soup)
     post_data["__EVENTTARGET"] = "calendar1$lb_Next"
     post_data["__EVENTARGUMENT"] = ""
     r2 = safe_request(session, "POST", url, timeout=30, headers=headers, data=post_data)
     if r2 is None:
         return all_available
-    html2 = r2.text if hasattr(r2, 'text') else r2.content.decode("utf-8")
+    html2 = get_html(r2)
     soup2 = BeautifulSoup(html2, "html.parser")
-    dt2 = now_dt + datetime.timedelta(days=31)
-    dates2 = parse_available(soup2)
-    print(f"  第2個月找到 {len(dates2)} 個空房")
-    for d in dates2:
-        all_available.append({
-            "date": f"{dt2.year}/{dt2.month:02d}/{d['date']}",
-            "price": d["price"]
-        })
+    scrape_month("2", 1, now_dt, soup2, all_available)
 
     # 第3個月
-    print(f"  抓第3個月...")
+    print("  抓第3個月...")
     post_data2 = get_all_hidden(soup2)
     post_data2["__EVENTTARGET"] = "calendar1$lb_Next"
     post_data2["__EVENTARGUMENT"] = ""
     r3 = safe_request(session, "POST", url, timeout=30, headers=headers, data=post_data2)
     if r3 is None:
         return all_available
-    html3 = r3.text if hasattr(r3, 'text') else r3.content.decode("utf-8")
+    html3 = get_html(r3)
     soup3 = BeautifulSoup(html3, "html.parser")
-    dt3 = now_dt + datetime.timedelta(days=62)
-    dates3 = parse_available(soup3)
-    print(f"  第3個月找到 {len(dates3)} 個空房")
-    for d in dates3:
-        all_available.append({
-            "date": f"{dt3.year}/{dt3.month:02d}/{d['date']}",
-            "price": d["price"]
-        })
+    scrape_month("3", 2, now_dt, soup3, all_available)
 
-    
-    print("status:", resp.status_code, "length:", len(resp.text))
-    print("含 NT$:", "NT$" in resp.text, "含 cloudflare:", "cloudflare" in resp.text.lower())
-    print(resp.text[:300])
-
-
-    
     return all_available
 
 
 def scrape_room(r_id, max_retries=5):
     """重試機制：若結果為 None 或 0 筆，重新嘗試"""
-    import time
     result = None
     for attempt in range(1, max_retries + 1):
         result = scrape_room_once(r_id)
@@ -185,6 +208,7 @@ def scrape_room(r_id, max_retries=5):
             time.sleep(3)
 
     return result if result is not None else []
+
 
 def update_gist(data):
     url = f"https://api.github.com/gists/{GIST_ID}"
@@ -201,6 +225,8 @@ def update_gist(data):
     }
     r = requests.patch(url, headers=headers, json=payload)
     print("Gist 更新結果:", r.status_code)
+    return r.status_code
+
 
 if __name__ == "__main__":
     now_str = (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime("%Y-%m-%d %H:%M")
@@ -212,5 +238,15 @@ if __name__ == "__main__":
         result["rooms"][name] = dates if dates is not None else []
         print(f"  → 共 {len(result['rooms'][name])} 個空房日期")
 
-    update_gist(result)
+    # 全部房型都是 0 筆,疑似抓取失敗:不覆蓋 Gist,並讓 Actions 顯示失敗
+    # (除錯完成後,若希望「真的全客滿」也照常更新,可刪除這一段)
+    if not any(result["rooms"].values()):
+        print("全部房型皆為 0 筆,疑似抓取失敗,不更新 Gist")
+        sys.exit(1)
+
+    status = update_gist(result)
+    if status != 200:
+        print(f"Gist 更新失敗(HTTP {status}),請檢查 GIST_TOKEN 權限或是否過期")
+        sys.exit(1)
+
     print("完成！")
